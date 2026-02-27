@@ -3,7 +3,7 @@ import requests
 import time
 import threading
 
-TOKEN = "8540805626:AAFsE9ZiIvgfPYDtd6wh66m4qW9Xpa5QvGQ"
+TOKEN = "8540805626:AAFxyYeVsdAZvllGgkv7KUr07dMVUlikXtw"
 OPENROUTER_KEY = "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"
 
 bot = telebot.TeleBot(TOKEN)
