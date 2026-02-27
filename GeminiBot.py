@@ -1,34 +1,57 @@
-import telebot
+import os
 import requests
 import time
 import threading
+from flask import Flask, request
 
-TOKEN = "8540805626:AAFxyYeVsdAZvllGgkv7KUr07dMVUlikXtw"
-OPENROUTER_KEY = "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"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
-bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
+
+# ---------------- TELEGRAM SEND ----------------
+def send_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    return requests.post(url, json={
+        "chat_id": chat_id,
+        "text": text
+    }).json()
+
+def delete_message(chat_id, message_id):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
+    requests.post(url, json={
+        "chat_id": chat_id,
+        "message_id": message_id
+    })
+
+def send_document(chat_id, file_path):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+    with open(file_path, "rb") as f:
+        requests.post(url, files={"document": f}, data={"chat_id": chat_id})
+
 
 # ---------------- АНИМАЦИЯ ----------------
 def thinking_animation(chat_id, stop_event):
     dots = ["Думает.", "Думает..", "Думает..."]
     i = 0
-    current_message = None
+    current_message_id = None
 
     while not stop_event.is_set():
         try:
-            if current_message:
-                bot.delete_message(chat_id, current_message.message_id)
+            if current_message_id:
+                delete_message(chat_id, current_message_id)
 
-            current_message = bot.send_message(chat_id, dots[i % 3] + " 🤔")
+            response = send_message(chat_id, dots[i % 3] + " 🤔")
+            current_message_id = response["result"]["message_id"]
             i += 1
             time.sleep(1.2)
 
         except:
             pass
 
-    if current_message:
+    if current_message_id:
         try:
-            bot.delete_message(chat_id, current_message.message_id)
+            delete_message(chat_id, current_message_id)
         except:
             pass
 
@@ -52,9 +75,8 @@ def ask_model(user_text):
                         "Ты не OpenAI и не GPT. "
                         "Запрещено упоминать OpenAI или GPT. "
                         "Всегда отвечай на русском языке. "
-                        "Сначала подробно проанализируй вопрос в нескольких предложениях. "
-                        "Потом напиши строку ===FINAL=== "
-                        "и после неё дай краткий финальный ответ."
+                        "Сначала подробно проанализируй вопрос. "
+                        "Потом напиши ===FINAL=== и после неё краткий финальный ответ."
                     )
                 },
                 {
@@ -70,53 +92,66 @@ def ask_model(user_text):
     return data["choices"][0]["message"]["content"]
 
 
-# ---------------- ОБРАБОТЧИК ----------------
-@bot.message_handler(content_types=['text'])
-def handle_message(message):
+# ---------------- WEBHOOK ----------------
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    data = request.json
 
-    if message.from_user.is_bot:
-        return
+    if "message" not in data:
+        return "ok"
+
+    message = data["message"]
+
+    if "text" not in message:
+        return "ok"
+
+    if message.get("from", {}).get("is_bot"):
+        return "ok"
+
+    chat_id = message["chat"]["id"]
+    user_text = message["text"]
 
     stop_event = threading.Event()
 
     animation_thread = threading.Thread(
         target=thinking_animation,
-        args=(message.chat.id, stop_event)
+        args=(chat_id, stop_event)
     )
     animation_thread.start()
 
-    full_text = ask_model(message.text)
+    full_text = ask_model(user_text)
 
     stop_event.set()
     animation_thread.join()
 
-    # -------- РАЗДЕЛЕНИЕ THINKING И FINAL --------
+    # -------- РАЗДЕЛЕНИЕ --------
     if "===FINAL===" in full_text:
         parts = full_text.split("===FINAL===")
         thinking = parts[0].strip()
         final_answer = parts[1].strip()
     else:
-        # если модель не разделила
         split_index = int(len(full_text) * 0.6)
         thinking = full_text[:split_index].strip()
         final_answer = full_text[split_index:].strip()
 
-    # -------- ГОТОВО --------
-    done_msg = bot.send_message(message.chat.id, "Готово 🥶")
+    done = send_message(chat_id, "Готово 🥶")
     time.sleep(2)
-    bot.delete_message(message.chat.id, done_msg.message_id)
+    delete_message(chat_id, done["result"]["message_id"])
 
-    # -------- СОХРАНЯЕМ THINKING --------
     with open("Thinking.txt", "w", encoding="utf-8") as f:
         f.write(thinking)
 
-    # -------- ОТПРАВЛЯЕМ THINKING ФАЙЛ --------
-    with open("Thinking.txt", "rb") as f:
-        bot.send_document(message.chat.id, f)
+    send_document(chat_id, "Thinking.txt")
+    send_message(chat_id, final_answer)
 
-    # -------- ОТПРАВЛЯЕМ ФИНАЛ --------
-    bot.send_message(message.chat.id, final_answer)
+    return "ok"
 
 
-print("Trinity Mini запущен...")
-bot.infinity_polling()
+@app.route("/")
+def home():
+    return "Bot is running"
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
