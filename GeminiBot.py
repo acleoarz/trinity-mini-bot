@@ -45,7 +45,6 @@ def thinking_animation(chat_id, stop_event):
             current_message_id = response["result"]["message_id"]
             i += 1
             time.sleep(1.2)
-
         except:
             pass
 
@@ -91,8 +90,8 @@ def ask_model(user_text):
 def webhook():
     data = request.get_json(silent=True)
 
-if not data:
-    return "ok"
+    if not data:
+        return "ok"
 
     if "message" not in data:
         return "ok"
@@ -121,25 +120,11 @@ if not data:
     stop_event.set()
     animation_thread.join()
 
-    # -------- РАЗДЕЛЕНИЕ --------
-    if "===FINAL===" in full_text:
-        parts = full_text.split("===FINAL===")
-        thinking = parts[0].strip()
-        final_answer = parts[1].strip()
-    else:
-        split_index = int(len(full_text) * 0.6)
-        thinking = full_text[:split_index].strip()
-        final_answer = full_text[split_index:].strip()
-
     done = send_message(chat_id, "Готово 🥶")
-    time.sleep(2)
+    time.sleep(1)
     delete_message(chat_id, done["result"]["message_id"])
 
-    with open("Thinking.txt", "w", encoding="utf-8") as f:
-        f.write(thinking)
-
-    send_document(chat_id, "Thinking.txt")
-    send_message(chat_id, final_answer)
+    send_message(chat_id, full_text)
 
     return "ok"
 
