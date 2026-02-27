@@ -89,7 +89,10 @@ def ask_model(user_text):
 # ---------------- WEBHOOK ----------------
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    data = request.json
+    data = request.get_json(silent=True)
+
+if not data:
+    return "ok"
 
     if "message" not in data:
         return "ok"
