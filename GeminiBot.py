@@ -58,38 +58,32 @@ def thinking_animation(chat_id, stop_event):
 
 # ---------------- ЗАПРОС К МОДЕЛИ ----------------
 def ask_model(user_text):
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "arcee-ai/trinity-mini:free",
+                "messages": [
+                    {"role": "user", "content": user_text}
+                ],
+                "max_tokens": 1000
+            },
+            timeout=30
+        )
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "arcee-ai/trinity-mini:free",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Ты — AI-модель Trinity Mini. "
-                        "Ты не OpenAI и не GPT. "
-                        "Запрещено упоминать OpenAI или GPT. "
-                        "Всегда отвечай на русском языке. "
-                        "Сначала подробно проанализируй вопрос. "
-                        "Потом напиши ===FINAL=== и после неё краткий финальный ответ."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": user_text
-                }
-            ],
-            "max_tokens": 1500
-        }
-    )
+        data = response.json()
 
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"]
+        else:
+            return f"Ошибка API: {data}"
+
+    except Exception as e:
+        return f"Ошибка запроса: {str(e)}"
 
 
 # ---------------- WEBHOOK ----------------
