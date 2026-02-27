@@ -12,22 +12,24 @@ app = Flask(__name__)
 # ---------------- TELEGRAM SEND ----------------
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    return requests.post(url, json={
-        "chat_id": chat_id,
-        "text": text
-    }).json()
+    try:
+        r = requests.post(url, json={
+            "chat_id": chat_id,
+            "text": text
+        })
+        return r.json()
+    except:
+        return {}
 
 def delete_message(chat_id, message_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
-    requests.post(url, json={
-        "chat_id": chat_id,
-        "message_id": message_id
-    })
-
-def send_document(chat_id, file_path):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
-    with open(file_path, "rb") as f:
-        requests.post(url, files={"document": f}, data={"chat_id": chat_id})
+    try:
+        requests.post(url, json={
+            "chat_id": chat_id,
+            "message_id": message_id
+        })
+    except:
+        pass
 
 
 # ---------------- АНИМАЦИЯ ----------------
@@ -42,7 +44,10 @@ def thinking_animation(chat_id, stop_event):
                 delete_message(chat_id, current_message_id)
 
             response = send_message(chat_id, dots[i % 3] + " 🤔")
-            current_message_id = response["result"]["message_id"]
+
+            if "result" in response:
+                current_message_id = response["result"]["message_id"]
+
             i += 1
             time.sleep(1.2)
         except:
@@ -88,45 +93,49 @@ def ask_model(user_text):
 # ---------------- WEBHOOK ----------------
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(silent=True)
+    try:
+        data = request.get_json(silent=True)
 
-    if not data:
+        if not data:
+            return "ok"
+
+        if "message" not in data:
+            return "ok"
+
+        message = data["message"]
+
+        if "text" not in message:
+            return "ok"
+
+        if message.get("from", {}).get("is_bot"):
+            return "ok"
+
+        chat_id = message["chat"]["id"]
+        user_text = message["text"]
+
+        stop_event = threading.Event()
+
+        animation_thread = threading.Thread(
+            target=thinking_animation,
+            args=(chat_id, stop_event)
+        )
+        animation_thread.start()
+
+        full_text = ask_model(user_text)
+
+        stop_event.set()
+        animation_thread.join()
+
+        try:
+            send_message(chat_id, full_text)
+        except:
+            pass
+
         return "ok"
 
-    if "message" not in data:
+    except Exception as e:
+        print("Webhook error:", e)
         return "ok"
-
-    message = data["message"]
-
-    if "text" not in message:
-        return "ok"
-
-    if message.get("from", {}).get("is_bot"):
-        return "ok"
-
-    chat_id = message["chat"]["id"]
-    user_text = message["text"]
-
-    stop_event = threading.Event()
-
-    animation_thread = threading.Thread(
-        target=thinking_animation,
-        args=(chat_id, stop_event)
-    )
-    animation_thread.start()
-
-    full_text = ask_model(user_text)
-
-    stop_event.set()
-    animation_thread.join()
-
-    done = send_message(chat_id, "Готово 🥶")
-    time.sleep(1)
-    delete_message(chat_id, done["result"]["message_id"])
-
-    send_message(chat_id, full_text)
-
-    return "ok"
 
 
 @app.route("/")
