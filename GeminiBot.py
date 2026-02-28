@@ -70,7 +70,7 @@ def ask_model(user_text):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "arcee-ai/trinity-mini:free",
+                "model": "arcee-ai/trinity-large-preview:free",
                 "messages": [
                     {"role": "user", "content": user_text}
                 ],
